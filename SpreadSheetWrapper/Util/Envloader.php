@@ -31,9 +31,6 @@ use Exception;
  */
 class EnvLoader
 {
-    /** @var string デフォルトの.envファイルの場所（実行中ディレクトリ） */
-    private const DEFAULT_ENV_PATH = __DIR__;
-
     /** @var string デフォルトの.envファイル名 */
     private const DEFAULT_ENV_FILE_NAME = ".env.local";
 
@@ -61,7 +58,7 @@ class EnvLoader
         ?string $envPath = null,
         ?string $envFileName = null
     ): string {
-        $envPath ??= self::DEFAULT_ENV_PATH;
+        $envPath ??= getcwd();
         $envFileName ??= self::DEFAULT_ENV_FILE_NAME;
 
         // .envファイルを読み込む

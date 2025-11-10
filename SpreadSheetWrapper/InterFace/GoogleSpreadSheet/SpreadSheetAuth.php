@@ -42,7 +42,7 @@ class SpreadSheetAuth
      * .env に記載されたGoogle認証ファイルパスのキー名
      * 例：GOOGLE_CREDENTIAL_PATH_ENV_KEY="credentials/key.json"
      */
-    private const GOOGLE_CREDENTIAL_PATH_ENV_KEY = "GOOGLE_CREDENTIAL_PATH_ENV_KEY";
+    private const GOOGLE_CREDENTIAL_PATH_ENV_KEY = "GOOGLE_CREDENTIAL_PATH";
 
     /** @var Client Google API Client インスタンス */
     private Client $client;
