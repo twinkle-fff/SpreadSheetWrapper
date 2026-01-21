@@ -1,7 +1,7 @@
 {
     "name": "keisukesaichi/spread-sheet-wrapper",
     "description": "A lightweight PHP library for reading and writing Google Spreadsheets easily, especially designed for Japanese beginners.",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "license": "MIT",
     "type": "library",
     "require": {
