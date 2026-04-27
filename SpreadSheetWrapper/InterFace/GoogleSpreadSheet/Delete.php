@@ -66,7 +66,7 @@ class Delete
         $auth ??= new SpreadSheetAuth($envFileName, $envFilePath);
         $this->client = $auth->getClient();
 
-        $sheetID   ??= EnvLoader::getEnv(self::DEFAULT_SHEET_ID_ENV_KEY, $envFilePath, $envFileName);
+        $sheetID ??= EnvLoader::getEnv(self::DEFAULT_SHEET_ID_ENV_KEY, $envFilePath, $envFileName);
         $sheetName ??= EnvLoader::getEnv(self::DEFAULT_SHEET_NAME_ENV_KEY, $envFilePath, $envFileName);
 
         $this->sheetID = $sheetID;
@@ -77,26 +77,18 @@ class Delete
         } catch (Exception $e) {
             throw new Exception(
                 "GoogleSpreadSheet の削除準備に失敗しました。\n詳細: {$e->getMessage()}",
-                (int)$e->getCode(),
+                (int) $e->getCode(),
                 $e
             );
         }
     }
 
-    /**
-     * 指定範囲に含まれる行を削除する。
-     *
-     * @param string $range 削除対象行を含む範囲（例: A2:Y2 / A2 / 2:2）
-     * @param string|null $sheetName 対象シート名。省略時は既定シート名
-     * @throws Exception
-     * @return bool
-     */
     public function deleteRow(string $range, ?string $sheetName = null): bool
     {
         $sheetName ??= $this->sheetName;
 
         $sheetId = $this->resolveSheetId($sheetName);
-        [$startIndex, $endIndex] = $this->parseRowIndexes($range);
+        [$startIndex, $endIndex] = $this->parseRowIndexes($range, $sheetName);
 
         $request = new Request([
             'deleteDimension' => new DeleteDimensionRequest([
@@ -119,12 +111,11 @@ class Delete
         } catch (Exception $e) {
             throw new Exception(
                 "行の削除に失敗しました。sheetName={$sheetName}, range={$range}\n詳細: {$e->getMessage()}",
-                (int)$e->getCode(),
+                (int) $e->getCode(),
                 $e
             );
         }
     }
-
     /**
      * 指定シートを削除する。
      *
@@ -158,7 +149,7 @@ class Delete
         } catch (Exception $e) {
             throw new Exception(
                 "シートの削除に失敗しました。sheetName={$sheetName}\n詳細: {$e->getMessage()}",
-                (int)$e->getCode(),
+                (int) $e->getCode(),
                 $e
             );
         }
@@ -179,7 +170,7 @@ class Delete
             $properties = $sheet->getProperties();
 
             if ($properties->getTitle() === $sheetName) {
-                return (int)$properties->getSheetId();
+                return (int) $properties->getSheetId();
             }
         }
 
@@ -189,30 +180,68 @@ class Delete
     /**
      * A1形式の範囲から削除対象行の startIndex / endIndex を取得する。
      *
-     * Google Sheets API の行番号は0始まり、endIndexは排他的。
+     * 対応例:
+     * - 3:3       => 3行目のみ
+     * - 3:10      => 3〜10行目
+     * - A3        => 3行目のみ
+     * - A3:Y3     => 3行目のみ
+     * - A3:Y      => 3行目〜シート最終行
      *
      * @param string $range
+     * @param string $sheetName
      * @throws Exception
      * @return array{0:int,1:int}
      */
-    private function parseRowIndexes(string $range): array
+    private function parseRowIndexes(string $range, string $sheetName): array
     {
-        if (preg_match('/^(\d+):(\d+)$/', $range, $m)) {
-            $startRow = (int)$m[1];
-            $endRow = (int)$m[2];
+        $range = trim($range);
 
-            return [$startRow - 1, $endRow];
+        if (preg_match('/^(\d+):(\d+)$/', $range, $m)) {
+            return [(int) $m[1] - 1, (int) $m[2]];
         }
 
-        if (preg_match('/^[A-Z]+(\d+)(?::[A-Z]+(\d+))?$/i', $range, $m)) {
-            $startRow = (int)$m[1];
-            $endRow = isset($m[2]) && $m[2] !== ''
-                ? (int)$m[2]
-                : $startRow;
+        if (preg_match('/^(\d+)$/', $range, $m)) {
+            $row = (int) $m[1];
+            return [$row - 1, $row];
+        }
 
-            return [$startRow - 1, $endRow];
+        if (preg_match('/^[A-Z]+(\d+)$/i', $range, $m)) {
+            $row = (int) $m[1];
+            return [$row - 1, $row];
+        }
+
+        if (preg_match('/^[A-Z]+(\d+):[A-Z]+(\d+)$/i', $range, $m)) {
+            return [(int) $m[1] - 1, (int) $m[2]];
+        }
+
+        if (preg_match('/^[A-Z]+(\d+):[A-Z]+$/i', $range, $m)) {
+            $startRow = (int) $m[1];
+            $lastRow = $this->resolveSheetRowCount($sheetName);
+
+            return [$startRow - 1, $lastRow];
         }
 
         throw new Exception("削除対象行を解釈できません。range={$range}");
+    }
+    /**
+     * シートの最大行数を取得する。
+     *
+     * @param string $sheetName
+     * @throws Exception
+     * @return int
+     */
+    private function resolveSheetRowCount(string $sheetName): int
+    {
+        $spreadsheet = $this->sheet->spreadsheets->get($this->sheetID);
+
+        foreach ($spreadsheet->getSheets() as $sheet) {
+            $properties = $sheet->getProperties();
+
+            if ($properties->getTitle() === $sheetName) {
+                return (int) $properties->getGridProperties()->getRowCount();
+            }
+        }
+
+        throw new Exception("指定されたシートが見つかりません。sheetName={$sheetName}");
     }
 }
