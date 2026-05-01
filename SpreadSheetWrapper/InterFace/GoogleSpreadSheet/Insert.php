@@ -7,6 +7,8 @@ use Google\Service\Sheets;
 use Google\Service\Sheets\ValueRange;
 use Google\Service\Sheets\AppendValuesResponse;
 use Google\Service\Sheets\UpdateValuesResponse;
+use Google\Service\Sheets\BatchUpdateValuesRequest;
+use Google\Service\Sheets\BatchUpdateValuesResponse;
 use SpreadSheetWrapper\Util\EnvLoader;
 
 /**
@@ -76,10 +78,10 @@ class Insert
         $this->client = $auth->getClient();
 
         // ID とシート名は .env の値がデフォルト
-        $sheetID   ??= EnvLoader::getEnv(self::DEFAULT_SHEET_ID_ENV_KEY, $envFilePath, $envFileName);
+        $sheetID ??= EnvLoader::getEnv(self::DEFAULT_SHEET_ID_ENV_KEY, $envFilePath, $envFileName);
         $sheetName ??= EnvLoader::getEnv(self::DEFAULT_SHEET_NAME_ENV_KEY, $envFilePath, $envFileName);
 
-        $this->sheetID   = $sheetID;
+        $this->sheetID = $sheetID;
         $this->sheetName = $sheetName;
 
         try {
@@ -105,9 +107,9 @@ class Insert
      */
     public function insert(array $values, string $range, ?string $sheetName = null): AppendValuesResponse
     {
-        $sheetName  ??= $this->sheetName;
-        $writeRange  = "{$sheetName}!{$range}";
-        $valueRange  = $this->buildValueRange($values);
+        $sheetName ??= $this->sheetName;
+        $writeRange = "{$sheetName}!{$range}";
+        $valueRange = $this->buildValueRange($values);
 
         try {
             /** @var AppendValuesResponse $res */
@@ -139,9 +141,9 @@ class Insert
      */
     public function update(array $values, string $range, ?string $sheetName = null): UpdateValuesResponse
     {
-        $sheetName  ??= $this->sheetName;
-        $writeRange  = "{$sheetName}!{$range}";
-        $valueRange  = $this->buildValueRange($values);
+        $sheetName ??= $this->sheetName;
+        $writeRange = "{$sheetName}!{$range}";
+        $valueRange = $this->buildValueRange($values);
 
         try {
             /** @var UpdateValuesResponse $res */
@@ -162,6 +164,88 @@ class Insert
     }
 
     /**
+     * 複数レンジをまとめて上書き更新します。
+     *
+     * 例:
+     * $insert->batchUpdate([
+     *     [
+     *         'range' => 'C5',
+     *         'values' => [['発送待ち']],
+     *     ],
+     *     [
+     *         'range' => 'C8',
+     *         'values' => [['発送済み']],
+     *     ],
+     * ]);
+     *
+     * @param array<int,array{range:string, values:array}> $data
+     * @param string|null $sheetName 対象シート名（未指定なら既定）
+     * @return BatchUpdateValuesResponse
+     * @throws Exception
+     */
+    /**
+     * 複数レンジをまとめて上書き更新します。
+     *
+     * 例:
+     * $insert->batchUpdate([
+     *     [
+     *         'range' => 'C5',
+     *         'values' => [['発送待ち']],
+     *     ],
+     *     [
+     *         'range' => 'C8',
+     *         'values' => [['発送済み']],
+     *     ],
+     * ]);
+     *
+     * @param array<int,array{range:string, values:array}> $data
+     * @param string|null $sheetName 対象シート名（未指定なら既定）
+     * @return BatchUpdateValuesResponse
+     * @throws Exception
+     */
+    public function batchUpdate(array $data, ?string $sheetName = null): BatchUpdateValuesResponse
+    {
+        $sheetName ??= $this->sheetName;
+
+        $valueRanges = [];
+
+        foreach ($data as $item) {
+            if (!isset($item['range'], $item['values'])) {
+                throw new Exception('batchUpdate の data には range と values が必要です。');
+            }
+
+            $values = $item['values'];
+            $this->normalizeNests($values);
+            $newValueRange = new ValueRange();
+            $newValueRange->setRange(
+                "{$sheetName}!{$item['range']}"
+            );
+            $newValueRange->setValues($values);
+            $valueRanges[] = $newValueRange;
+        }
+
+        $body = new BatchUpdateValuesRequest();
+        $body->setValueInputOption('USER_ENTERED');
+        $body->setData($valueRanges);
+
+        try {
+            /** @var BatchUpdateValuesResponse $res */
+            $res = $this->sheet->spreadsheets_values->batchUpdate(
+                $this->sheetID,
+                $body
+            );
+
+            return $res;
+        } catch (Exception $e) {
+            throw new Exception(
+                "batchUpdate に失敗しました。\n詳細: {$e->getMessage()}",
+                $e->getCode(),
+                $e
+            );
+        }
+    }
+
+    /**
      * 値配列を ValueRange に変換（内部でネスト正規化）
      *
      * @param array $values
@@ -170,7 +254,9 @@ class Insert
     private function buildValueRange(array $values): ValueRange
     {
         $this->normalizeNests($values);
-        return new ValueRange(['values' => $values]);
+        $valueRange =  new ValueRange();
+        $valueRange->setValues($values);
+        return $valueRange;
     }
 
     /**
@@ -187,7 +273,10 @@ class Insert
         // 1次元だけ渡されたら行として包む
         $isAssocOrFlat = true;
         foreach ($values as $v) {
-            if (is_array($v)) { $isAssocOrFlat = false; break; }
+            if (is_array($v)) {
+                $isAssocOrFlat = false;
+                break;
+            }
         }
         if ($isAssocOrFlat) {
             $values = [$values];
@@ -204,7 +293,7 @@ class Insert
                         static function ($v) {
                             return is_array($v)
                                 ? json_encode($v, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
-                                : (string)$v;
+                                : (string) $v;
                         },
                         $cell
                     ));
@@ -217,3 +306,4 @@ class Insert
         unset($row);
     }
 }
+

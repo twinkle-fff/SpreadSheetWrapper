@@ -4,6 +4,11 @@ namespace SpreadSheetWrapper\InterFace\GoogleSpreadSheet;
 use Exception;
 use Google\Client;
 use Google\Service\Sheets;
+use Google\Service\Sheets\AddSheetRequest;
+use Google\Service\Sheets\SheetProperties;
+use Google\Service\Sheets\Request;
+use \Google\Service\Sheets\BatchUpdateSpreadsheetRequest;
+use Google\Service\Sheets\SpreadsheetProperties;
 use SpreadSheetWrapper\Util\EnvLoader;
 
 class InsertSheet
@@ -57,19 +62,17 @@ class InsertSheet
     {
         try {
 
-            $addSheetRequest = new \Google\Service\Sheets\AddSheetRequest([
-                "properties" => [
-                    "title" => $sheetName
-                ]
-            ]);
+            $addSheetRequest = new AddSheetRequest();
+            $sheetProperty = new SheetProperties();
+            $sheetProperty->setTitle($sheetName);
+            $addSheetRequest->setProperties($sheetProperty);
 
-            $request = new \Google\Service\Sheets\Request([
-                "addSheet" => $addSheetRequest
-            ]);
 
-            $batchUpdateRequest = new \Google\Service\Sheets\BatchUpdateSpreadsheetRequest([
-                "requests" => [$request]
-            ]);
+            $request = new Request();
+            $request->setAddSheet($addSheetRequest);
+
+            $batchUpdateRequest = new BatchUpdateSpreadsheetRequest();
+            $batchUpdateRequest->setRequests([$request]);
 
             $this->sheet->spreadsheets->batchUpdate(
                 $this->sheetID,
